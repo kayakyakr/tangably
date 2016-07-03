@@ -27,7 +27,7 @@ $(function(){
       $.getJSON('https://www.eventbriteapi.com/v3/events/search/', {
         'organizer.id': 7968957941,
         'token': 'SLFEA7QIEFSH5M66OCHU',
-        'expand': 'venue'
+        'expand': 'venue,ticket_classes'
       }).then((data) => {
         this.events = data.events;
         this.ajaxComplete = true;
@@ -68,11 +68,12 @@ $(function(){
       $nextEvent.find('.date').html(`${moment(nextEvent.start.local).format('lll')} - ${moment(nextEvent.end.local).format('lll')}`);
       let addr = nextEvent.venue.address;
       $nextEvent.find('.location').html([addr.address_1, addr.address_2, addr.city, addr.region, addr.postal_code].filter((a) => a).join(', '));
+      $nextEvent.wrap(`<a href="${nextEvent.url}"></a>`);
       $nextEvent.css({transition: 'opacity 0.75s ease'});
       setTimeout(() => $nextEvent.css({opacity: 1}), 0);
 
       // render nearby events
-      var $nearbyEvents = $('.near-event-1, .near-event-2, .near-event-3'),
+      var $nearbyEvents = $('.near-event, .near-event-1, .near-event-2, .near-event-3, .near-event-4, .near-event-5, .near-event-6'),
           nearbyEvents = this.eventsByDistance;
 
       $nearbyEvents.each((i, evt) => {
@@ -85,9 +86,52 @@ $(function(){
         $evt.find('.date').html(`${moment(nearby.start.local).format('lll')} - ${moment(nearby.end.local).format('lll')}`);
         let addr = nearby.venue.address;
         $evt.find('.location').html([addr.address_1, addr.address_2, addr.city, addr.region, addr.postal_code].filter((a) => a).join(', '));
+        $evt.wrap(`<a href="${nearby.url}"></a>`);
         $evt.css({transition: `opacity 0.75s ease ${0.1 * (i + 1)}s`});
       });
       setTimeout(() => $nearbyEvents.css({opacity: 1}), 0);
+
+      if(/googlebot/i.test(navigator.userAgent)){
+        this.renderSEOMarkup();
+      }
+    }
+
+    renderSEOMarkup(){
+        let seoData = this.events.map((e) => {
+          return {
+            "@context": "http://schema.org",
+            "@type": "Event",
+            name: e.name.text,
+            startDate: e.start.utc,
+            endDate: e.end.utc,
+            url: e.url,
+            description: e.description.text,
+            image: e.logo.url,
+            location: {
+              "@type": 'Place',
+              name: e.venue.name,
+              address: [e.venue.address.address_1, e.venue.address.address_2, e.venue.address.city, e.venue.address.region, e.venue.address.postal_code].filter((a) => a).join(', ')
+            },
+            offers: e.ticket_classes.map((tc) => {
+              return {
+                url: tc.resource_uri,
+                name: tc.name,
+                category: 'Primary',
+                price: tc.cost ? tc.cost.value/100 : 0,
+                priceCurrency: tc.cost ? tc.cost.currency : 'USD',
+                availability: tc.on_sale_status === 'AVAILABLE' ? 'InStock' : 'SoldOut',
+                validThrough: tc.sales_end
+              }
+            }),
+            performer: {
+              name: 'Jacob Dale',
+              sameAs: 'https://www.linkedin.com/in/jacobdale'
+            }
+          }
+        })
+        $('body').append(`<script type="application/ld+json">
+          ${JSON.stringify(seoData)}
+        </script>`)
     }
 
     get eventsByDate(){
